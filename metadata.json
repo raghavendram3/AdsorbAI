@@ -1,0 +1,5 @@
+{
+  "name": "AdsorbAI",
+  "description": "An automated adsorption site analysis tool for materials science, leveraging AI to simulate DFT calculations and visualize crystal structures using simulated ASE and FAIR-Chem workflows.",
+  "requestFramePermissions": []
+}
