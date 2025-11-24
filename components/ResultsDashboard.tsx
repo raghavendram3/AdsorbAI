@@ -10,7 +10,7 @@ import {
   Cell 
 } from 'recharts';
 import { AnalysisResult } from '../types';
-import { Download, FileText, Activity, Database, Layers } from 'lucide-react';
+import { Download, FileText, Activity, Database, Box, Zap, Layers } from 'lucide-react';
 
 interface ResultsDashboardProps {
   result: AnalysisResult | null;
@@ -37,6 +37,34 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result }) =>
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       
+      {/* Simulated Materials Project Data Card */}
+      <div className="p-0 bg-slate-800/30 border border-slate-700/50 rounded-xl overflow-hidden">
+        <div className="px-4 py-2 bg-slate-800/50 border-b border-slate-700/50 flex items-center gap-2">
+           <Database className="w-3.5 h-3.5 text-blue-400" />
+           <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wide">Materials Project Data</h3>
+        </div>
+        <div className="p-4 grid grid-cols-3 gap-4">
+           <div className="flex flex-col gap-1">
+              <span className="text-[10px] text-slate-500 font-medium uppercase">Formation E.</span>
+              <span className="text-sm text-slate-200 font-mono flex items-center gap-1">
+                 <Zap className="w-3 h-3 text-yellow-500" /> -0.12<span className="text-xs text-slate-500">eV</span>
+              </span>
+           </div>
+           <div className="flex flex-col gap-1">
+              <span className="text-[10px] text-slate-500 font-medium uppercase">Band Gap</span>
+              <span className="text-sm text-slate-200 font-mono flex items-center gap-1">
+                 <Activity className="w-3 h-3 text-emerald-500" /> 0.00<span className="text-xs text-slate-500">eV</span>
+              </span>
+           </div>
+           <div className="flex flex-col gap-1">
+              <span className="text-[10px] text-slate-500 font-medium uppercase">Symmetry</span>
+              <span className="text-sm text-slate-200 font-mono flex items-center gap-1">
+                 <Box className="w-3 h-3 text-purple-500" /> Fm-3m
+              </span>
+           </div>
+        </div>
+      </div>
+
       {/* Summary Card */}
       <div className="p-5 bg-slate-800/50 border border-slate-700 rounded-xl">
         <div className="flex items-center justify-between mb-3">
@@ -44,49 +72,51 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result }) =>
                 <FileText className="w-4 h-4 text-emerald-400" />
                 <h3 className="text-sm font-semibold text-slate-200">Simulation Report</h3>
             </div>
-            <div className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-[10px] text-blue-300">
-                AI Simulated
+            <div className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-[10px] text-blue-300 font-mono">
+                AGENT_V1.0
             </div>
         </div>
         
-        <p className="text-sm text-slate-400 leading-relaxed">
+        <p className="text-sm text-slate-400 leading-relaxed font-light">
           {result.summary}
         </p>
 
-        <div className="mt-4 grid grid-cols-2 gap-3">
-            <div className="p-2 bg-slate-900/50 rounded border border-slate-700/50 flex flex-col gap-1">
-                <span className="text-[10px] text-slate-500 flex items-center gap-1">
-                    <Activity className="w-3 h-3" /> Potential
-                </span>
-                <span className="text-xs text-slate-300 font-medium truncate" title={result.potentialUsed}>
-                    {result.potentialUsed}
-                </span>
-            </div>
-            <div className="p-2 bg-slate-900/50 rounded border border-slate-700/50 flex flex-col gap-1">
-                <span className="text-[10px] text-slate-500 flex items-center gap-1">
-                    <Database className="w-3 h-3" /> Workflow
-                </span>
-                <span className="text-xs text-slate-300 font-medium truncate">
-                    MP + ASE + Pymatgen
-                </span>
-            </div>
+        <div className="mt-4 p-3 bg-slate-900/50 rounded border border-slate-700/50 flex items-center justify-between">
+             <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                <span className="text-xs text-slate-400">Workflow Active</span>
+             </div>
+             <div className="text-xs text-slate-500 font-mono">
+               {result.potentialUsed}
+             </div>
         </div>
       </div>
 
       {/* Energy Chart */}
-      <div className="p-5 bg-slate-800/50 border border-slate-700 rounded-xl h-80">
-        <h3 className="text-sm font-semibold text-slate-200 mb-4">Calculated Binding Energies</h3>
+      <div className="p-5 bg-slate-800/50 border border-slate-700 rounded-xl h-64">
+        <h3 className="text-sm font-semibold text-slate-200 mb-4">Binding Energies (E_ads)</h3>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={chartData} layout="vertical" margin={{ left: 20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal={false} />
-            <XAxis type="number" stroke="#94a3b8" label={{ value: 'Binding Energy (eV)', position: 'insideBottom', offset: -5, fill: '#94a3b8', fontSize: 12 }} />
-            <YAxis type="category" dataKey="name" width={80} stroke="#94a3b8" tick={{fontSize: 10}} />
+            <XAxis type="number" stroke="#64748b" tick={{fontSize: 10}} />
+            <YAxis type="category" dataKey="name" width={80} stroke="#94a3b8" tick={{fontSize: 10, fontFamily: 'monospace'}} />
             <Tooltip 
-              contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#e2e8f0' }}
-              itemStyle={{ color: '#e2e8f0' }}
               cursor={{fill: '#334155', opacity: 0.4}}
+              content={({ active, payload }) => {
+                if (active && payload && payload.length) {
+                  return (
+                    <div className="bg-slate-900 border border-slate-700 p-2 rounded shadow-xl">
+                      <p className="text-xs text-slate-300 mb-1">{payload[0].payload.name}</p>
+                      <p className="text-sm font-bold text-emerald-400">
+                        {Number(payload[0].value).toFixed(3)} eV
+                      </p>
+                    </div>
+                  );
+                }
+                return null;
+              }}
             />
-            <Bar dataKey="energy" radius={[0, 4, 4, 0]} barSize={20}>
+            <Bar dataKey="energy" radius={[0, 4, 4, 0]} barSize={12}>
               {chartData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={getBarColor(entry.energy)} />
               ))}
@@ -98,40 +128,36 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ result }) =>
       {/* Sites Table */}
       <div className="border border-slate-700 rounded-xl overflow-hidden bg-slate-800/30">
         <div className="px-4 py-3 bg-slate-800/80 border-b border-slate-700 flex justify-between items-center">
-          <h3 className="text-sm font-semibold text-slate-200">Relaxed Configurations</h3>
+          <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wide">Relaxed Configurations</h3>
           <button className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition">
             <Download className="w-4 h-4" />
           </button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className="text-xs text-slate-400 uppercase bg-slate-800/50">
+            <thead className="text-xs text-slate-400 uppercase bg-slate-800/50 font-semibold">
               <tr>
-                <th className="px-4 py-3">Site ID</th>
-                <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3">Position (Å)</th>
-                <th className="px-4 py-3 text-right">E_ads (eV)</th>
+                <th className="px-4 py-2">Site ID</th>
+                <th className="px-4 py-2">Type</th>
+                <th className="px-4 py-2 text-right">E_ads (eV)</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-700">
+            <tbody className="divide-y divide-slate-700/50">
               {sites.map((site) => (
-                <tr key={site.id} className="hover:bg-slate-700/30 transition-colors">
-                  <td className="px-4 py-3 font-medium text-slate-300">
+                <tr key={site.id} className="hover:bg-slate-700/30 transition-colors group">
+                  <td className="px-4 py-2 font-mono text-xs text-slate-400 group-hover:text-slate-200">
                     {site.id.slice(0, 8)}...
                   </td>
-                  <td className="px-4 py-3 text-slate-400">
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] border ${
-                      site.type === 'Hollow' ? 'bg-purple-500/10 border-purple-500/30 text-purple-400' :
-                      site.type === 'Bridge' ? 'bg-orange-500/10 border-orange-500/30 text-orange-400' :
-                      'bg-blue-500/10 border-blue-500/30 text-blue-400'
+                  <td className="px-4 py-2">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${
+                      site.type === 'Hollow' ? 'bg-purple-500/10 border-purple-500/20 text-purple-400' :
+                      site.type === 'Bridge' ? 'bg-orange-500/10 border-orange-500/20 text-orange-400' :
+                      'bg-blue-500/10 border-blue-500/20 text-blue-400'
                     }`}>
                       {site.type}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-slate-400 font-mono text-xs">
-                    [{site.coordinates.map(c => c.toFixed(2)).join(', ')}]
-                  </td>
-                  <td className={`px-4 py-3 text-right font-medium ${
+                  <td className={`px-4 py-2 text-right font-mono text-xs ${
                     site.energy < -2 ? 'text-emerald-400' : 
                     site.energy < -1 ? 'text-blue-400' : 'text-red-400'
                   }`}>

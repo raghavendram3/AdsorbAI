@@ -11,25 +11,36 @@ export const generateStructure = async (query: string, mpApiKey?: string): Promi
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const prompt = `
-    Act as an interface for the Materials Project API and the ASE (Atomic Simulation Environment) Python library.
+    Act as a Python-based Materials Science Agent.
     
+    Libraries available in environment:
+    - mp_api.client.MPRester (Materials Project)
+    - ase.build (Atomic Simulation Environment)
+    - pymatgen.core
+
     User Query: "${query}"
-    Materials Project API Key Provided: ${mpApiKey ? "YES (Simulate authenticated request)" : "NO (Simulate public data)"}
+    MP API Key: ${mpApiKey ? "Provided (Simulate authenticated fetch)" : "Not Provided (Simulate public/cached data)"}
 
     Task:
-    1. Simulate calling the Materials Project API (MPRester) to find the most stable bulk crystal structure matching the query. Identify its MP-ID (e.g., mp-1234).
-    2. Simulate using the 'ase.build.surface' function to cut a surface slab from this bulk structure.
-       - Choose the most common stable facet if not specified (e.g., (111) for fcc).
-       - Create a slab with at least 3 layers and 10Å vacuum.
-    
+    1. Parse the user query to identify the material (e.g., "Au") and surface (e.g., "111").
+    2. Simulate: \`with MPRester(api_key) as mpr: docs = mpr.materials.summary.search(formula=...)\`.
+    3. Select the most stable bulk structure (lowest formation energy) from the search results.
+    4. Simulate: \`slab = ase.build.surface(bulk, indices=..., layers=4, vacuum=10.0)\`.
+    5. Center the slab.
+    6. Extract lattice vectors (cell).
+
     Return a JSON object with:
     1. 'formula': Chemical formula.
-    2. 'mpId': The simulated Materials Project ID (e.g., 'mp-81').
-    3. 'millerIndex': The miller index of the surface cut (e.g., '(1 1 1)').
-    4. 'description': Technical description (e.g., "Gold (111) slab generated via ASE from mp-81").
-    5. 'atoms': Array of objects with 'element', 'x', 'y', 'z' (Angstroms).
+    2. 'mpId': Simulated MP-ID (e.g., 'mp-81').
+    3. 'millerIndex': Surface indices used (e.g., '(1 1 1)').
+    4. 'description': Technical description.
+    5. 'formationEnergy': Simulated formation energy in eV/atom.
+    6. 'bandGap': Simulated band gap in eV.
+    7. 'symmetry': Spacegroup symbol of the bulk.
+    8. 'atoms': Array of atoms in the slab ({element, x, y, z}).
+    9. 'latticeVectors': 3x3 array representing the unit cell [v1, v2, v3].
     
-    Limit to approx 20-50 atoms for visualization performance.
+    Limit atom count to 20-60 for web visualization.
   `;
 
   const response = await ai.models.generateContent({
@@ -44,6 +55,9 @@ export const generateStructure = async (query: string, mpApiKey?: string): Promi
           mpId: { type: Type.STRING },
           millerIndex: { type: Type.STRING },
           description: { type: Type.STRING },
+          formationEnergy: { type: Type.NUMBER },
+          bandGap: { type: Type.NUMBER },
+          symmetry: { type: Type.STRING },
           atoms: {
             type: Type.ARRAY,
             items: {
@@ -56,9 +70,16 @@ export const generateStructure = async (query: string, mpApiKey?: string): Promi
               },
               required: ["element", "x", "y", "z"]
             }
+          },
+          latticeVectors: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.ARRAY,
+              items: { type: Type.NUMBER }
+            }
           }
         },
-        required: ["formula", "description", "atoms"]
+        required: ["formula", "atoms", "latticeVectors"]
       }
     }
   });
@@ -75,10 +96,14 @@ export const generateStructure = async (query: string, mpApiKey?: string): Promi
 
   return {
     formula: data.formula,
-    mpId: data.mpId,
+    mpId: data.mpId || "mp-simulated",
     millerIndex: data.millerIndex,
     description: data.description,
-    atoms: atoms
+    formationEnergy: data.formationEnergy,
+    bandGap: data.bandGap,
+    symmetry: data.symmetry,
+    atoms: atoms,
+    latticeVectors: data.latticeVectors
   };
 };
 
@@ -97,36 +122,31 @@ export const analyzeAdsorption = async (
   const structureSummary = `
     Material: ${structure.formula} (MP-ID: ${structure.mpId || 'N/A'})
     Surface: ${structure.millerIndex || 'Unknown'}
-    Atom Count: ${structure.atoms.length}
   `;
 
   const prompt = `
-    Act as a computational materials scientist expert in Pymatgen and FAIR-Chem models.
+    Act as a Python-based Computational Chemistry Agent.
     
-    Task: Perform a full automated adsorption analysis workflow.
+    Libraries:
+    - pymatgen.analysis.adsorption.AdsorbateSiteFinder
+    - fairchem.core (OCP models)
     
-    Workflow Steps to Simulate:
-    1. **Pymatgen Analysis**: Use \`pymatgen.analysis.adsorption.AdsorbateSiteFinder\` to identify all symmetry-distinct adsorption sites (Top, Bridge, Hollow) on the provided surface.
-    2. **Structure Generation**: Simulate placing the adsorbate molecule '${adsorbate}' at each identified site at a reasonable height (e.g., 2.0 Å).
-    3. **Relaxation**: Simulate running a structural relaxation (geometry optimization) for each configuration using the **FAIR-Chem UMA (Universal ML Potential)**. 
-       - Assume the UMA potential provides accuracy comparable to DFT.
-    4. **Energy Calculation**: Calculate the binding energy $E_{ads} = E_{sys} - (E_{surf} + E_{mol})$.
+    Task: Automated Adsorption Analysis for molecule '${adsorbate}' on ${structure.formula} surface.
     
-    Structure Info:
-    ${structureSummary}
+    Simulate this Python workflow:
+    1. \`asf = AdsorbateSiteFinder(slab)\`
+    2. \`sites = asf.find_adsorption_sites()\` -> Identify Top, Bridge, Hollow sites.
+    3. Place '${adsorbate}' molecule at each site.
+    4. Load Potential: \`calc = OCPCalculator(checkpoint="fairchem_uma_v1.pt")\`
+    5. Relax each configuration: \`opt = LBFGS(atoms); opt.run(fmax=0.05)\`
+    6. Compute Binding Energy: E_ads = E_total - E_slab - E_mol.
     
-    Returns:
-    A JSON object containing:
-    1. 'sites': A list of the relaxed sites found. For each:
-       - 'id': unique string
-       - 'type': Pymatgen site classification (Top, Bridge, Hollow, fcc, hcp)
-       - 'coordinates': [x, y, z] of the adsorbate after UMA relaxation.
-       - 'energy': Calculated binding energy in eV.
-       - 'description': Brief chemical insight about the stability.
-    2. 'summary': A technical summary mentioning the use of Pymatgen AdsorbateSiteFinder and FAIR-Chem UMA.
-    3. 'potentialUsed': Specifically "FAIR-Chem UMA (Simulated)".
+    Return JSON:
+    1. 'sites': List of relaxed sites (id, type, coordinates, energy, description).
+    2. 'summary': Technical report of the findings.
+    3. 'potentialUsed': "FAIR-Chem UMA (Simulated)".
     
-    Provide realistic data consistent with chemical intuition for ${adsorbate} on ${structure.formula}.
+    Make the energies realistic for this chemistry.
   `;
 
   const response = await ai.models.generateContent({
@@ -165,7 +185,7 @@ export const analyzeAdsorption = async (
   return {
     sites: data.sites,
     summary: data.summary,
-    potentialUsed: data.potentialUsed || "FAIR-Chem UMA (Simulated)",
-    calculationTime: `${(Math.random() * 3 + 1.5).toFixed(2)}s` // Fake calculation time
+    potentialUsed: "FAIR-Chem UMA (Simulated)",
+    calculationTime: `${(Math.random() * 4 + 2).toFixed(2)}s`
   };
 };

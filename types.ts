@@ -23,6 +23,10 @@ export interface MaterialStructure {
   millerIndex?: string; // e.g., (1 1 1)
   atoms: Atom[];
   latticeVectors?: number[][];
+  // New fields for MP data
+  formationEnergy?: number;
+  bandGap?: number;
+  symmetry?: string;
 }
 
 export interface AnalysisResult {
@@ -44,4 +48,5 @@ export interface LogEntry {
   timestamp: string;
   message: string;
   type: 'info' | 'success' | 'warning' | 'error';
+  source?: string; // e.g., 'ASE', 'Pymatgen', 'System'
 }

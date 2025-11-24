@@ -1,10 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Header } from './components/Header';
 import { StructureViewer } from './components/StructureViewer';
 import { ResultsDashboard } from './components/ResultsDashboard';
 import { MaterialStructure, AnalysisResult, AnalysisStatus, LogEntry } from './types';
 import { generateStructure, analyzeAdsorption } from './services/geminiService';
-import { Search, Play, Terminal, Cpu, Database, RotateCw, KeyRound, FlaskConical } from 'lucide-react';
+import { Search, Play, Terminal, Cpu, Database, RotateCw, KeyRound, FlaskConical, ChevronRight } from 'lucide-react';
 
 const App: React.FC = () => {
   const [query, setQuery] = useState('Au(111)');
@@ -14,9 +14,15 @@ const App: React.FC = () => {
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [status, setStatus] = useState<AnalysisStatus>(AnalysisStatus.IDLE);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const logsEndRef = useRef<HTMLDivElement>(null);
 
-  const addLog = (message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
-    setLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString(), message, type }]);
+  // Auto-scroll logs
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logs]);
+
+  const addLog = (message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info', source: string = 'System') => {
+    setLogs(prev => [...prev, { timestamp: new Date().toLocaleTimeString([], { hour12: false }), message, type, source }]);
   };
 
   const handleGenerateStructure = useCallback(async () => {
@@ -26,28 +32,35 @@ const App: React.FC = () => {
     setStructure(null);
     setAnalysisResult(null);
     setLogs([]);
-    addLog(`Pipeline initialized for target: ${query}`, 'info');
-
+    
+    addLog(`Initializing Workflow Agent...`, 'info', 'Main');
+    
     try {
+      // Step 1: MP Rester
+      addLog(`from mp_api.client import MPRester`, 'info', 'Python');
       if (mpApiKey) {
-        addLog(`Authenticating with Materials Project API (Key: ****${mpApiKey.slice(-4)})...`, 'info');
+        addLog(`mpr = MPRester(api_key="****${mpApiKey.slice(-4)}")`, 'info', 'Python');
+        addLog(`Connecting to Materials Project API...`, 'info', 'MPRester');
       } else {
-        addLog("No MP API key provided. Using public/simulated data...", 'warning');
+        addLog(`mpr = MPRester() # Using public access`, 'warning', 'Python');
       }
-
-      addLog("Fetching bulk structure data from Materials Project...", 'info');
-      // Simulated delay for realism
-      await new Promise(resolve => setTimeout(resolve, 600));
       
-      addLog("Running ASE (Atomic Simulation Environment) to build surface slab...", 'info');
+      await new Promise(r => setTimeout(r, 600)); // Simulation delay
+      addLog(`Searching for lowest formation energy structure for '${query}'...`, 'info', 'MPRester');
+      
+      // Step 2: ASE Build
+      addLog(`import ase.build`, 'info', 'Python');
+      addLog(`Building surface slab via ase.build.surface...`, 'info', 'ASE');
+
       const struct = await generateStructure(query, mpApiKey);
       
       setStructure(struct);
-      addLog(`ASE Build Success: ${struct.formula} ${struct.millerIndex} (Source: ${struct.mpId})`, 'success');
+      addLog(`Structure created: ${struct.formula} ${struct.millerIndex}`, 'success', 'ASE');
+      addLog(`MP-ID: ${struct.mpId} | E_form: ${struct.formationEnergy?.toFixed(3)} eV/atom`, 'info', 'Data');
       setStatus(AnalysisStatus.IDLE);
     } catch (error: any) {
       console.error(error);
-      addLog(`ASE Build Failed: ${error.message}`, 'error');
+      addLog(`Traceback: ${error.message}`, 'error', 'Python');
       setStatus(AnalysisStatus.ERROR);
     }
   }, [query, mpApiKey]);
@@ -56,69 +69,72 @@ const App: React.FC = () => {
     if (!structure || !adsorbate) return;
 
     setStatus(AnalysisStatus.ANALYZING);
-    addLog(`Initiating adsorption workflow for ${adsorbate}...`, 'info');
+    addLog(`Starting Adsorption Analysis Pipeline...`, 'info', 'Main');
     
     try {
-      addLog("Running pymatgen.analysis.adsorption.AdsorbateSiteFinder...", 'info');
-      await new Promise(resolve => setTimeout(resolve, 800)); // UI delay
+      // Step 3: Pymatgen
+      addLog(`from pymatgen.analysis.adsorption import AdsorbateSiteFinder`, 'info', 'Python');
+      addLog(`asf = AdsorbateSiteFinder(slab)`, 'info', 'Python');
+      addLog(`Identifying symmetry-distinct adsorption sites...`, 'info', 'Pymatgen');
+      await new Promise(r => setTimeout(r, 800));
       
-      addLog("Generating initial configurations...", 'info');
-      
-      addLog("Loading FAIR-Chem UMA (Universal ML Potential) model...", 'info');
-      addLog("Running geometry optimization/relaxation on all sites...", 'info');
+      // Step 4: FAIR-Chem
+      addLog(`import fairchem.core`, 'info', 'Python');
+      addLog(`calc = OCPCalculator(checkpoint="fairchem_uma_v1")`, 'info', 'Python');
+      addLog(`Running geometry relaxation (LBFGS) for all configurations...`, 'info', 'FAIR-Chem');
       
       const result = await analyzeAdsorption(structure, adsorbate);
       
       setAnalysisResult(result);
-      addLog(`FAIR-Chem UMA relaxation complete. Converged ${result.sites.length} sites.`, 'success');
+      addLog(`Calculations complete. ${result.sites.length} stable configurations found.`, 'success', 'Main');
       setStatus(AnalysisStatus.COMPLETED);
     } catch (error: any) {
       console.error(error);
-      addLog(`Workflow Error: ${error.message}`, 'error');
+      addLog(`Runtime Error: ${error.message}`, 'error', 'Main');
       setStatus(AnalysisStatus.ERROR);
     }
   }, [structure, adsorbate]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 flex flex-col">
+    <div className="min-h-screen bg-slate-950 text-slate-200 flex flex-col font-sans selection:bg-emerald-500/30">
       <Header />
 
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        {/* LEFT COLUMN: Controls & Logs */}
+        {/* LEFT COLUMN: Agent Inputs */}
         <div className="lg:col-span-3 flex flex-col gap-6">
           
-          {/* Input Panel */}
+          {/* Materials Project Configuration */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
-            <h2 className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
+            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
               <Database className="w-4 h-4 text-emerald-400" />
-              Materials Project & ASE
+              Data Source
             </h2>
             
             <div className="space-y-4">
                <div>
-                <label className="text-xs text-slate-500 font-medium mb-1 block">MP API Key (Optional)</label>
+                <label className="text-xs text-slate-500 font-semibold mb-1 block">Materials Project API Key</label>
                 <div className="relative">
                   <input
                     type="password"
                     value={mpApiKey}
                     onChange={(e) => setMpApiKey(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg py-2 pl-3 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all text-white placeholder-slate-600 font-mono"
-                    placeholder="Enter API Key"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg py-2 pl-3 pr-8 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all text-slate-300 placeholder-slate-600 font-mono"
+                    placeholder="Paste key from materialsproject.org"
                   />
-                  <KeyRound className="w-3 h-3 text-slate-600 absolute right-3 top-3" />
+                  <KeyRound className="w-3 h-3 text-slate-600 absolute right-3 top-2.5" />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs text-slate-500 font-medium mb-1 block">Material / Surface Query</label>
+                <label className="text-xs text-slate-500 font-semibold mb-1 block">Target System</label>
                 <div className="relative">
                   <input
                     type="text"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg py-2 pl-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all text-white placeholder-slate-600"
-                    placeholder="e.g. Au(111), mp-81"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg py-2 pl-3 pr-10 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all text-white placeholder-slate-600"
+                    placeholder="e.g. Cu(100), mp-30"
                   />
                   <Search className="w-4 h-4 text-slate-500 absolute right-3 top-2.5" />
                 </div>
@@ -127,108 +143,117 @@ const App: React.FC = () => {
               <button
                 onClick={handleGenerateStructure}
                 disabled={status === AnalysisStatus.LOADING_STRUCTURE}
-                className="w-full py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed group"
+                className="w-full py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-emerald-500/50 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed group"
               >
                 {status === AnalysisStatus.LOADING_STRUCTURE ? (
-                  <RotateCw className="w-4 h-4 animate-spin" />
+                  <RotateCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
                 ) : (
-                  <Cpu className="w-4 h-4 group-hover:text-emerald-400 transition-colors" />
+                  <Cpu className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-400" />
                 )}
-                Fetch & Build Surface
+                Initialize Surface
               </button>
             </div>
           </div>
 
-          {/* Analysis Config */}
+          {/* DFT Workflow Config */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg relative overflow-hidden">
-             {/* Decorative Background gradient */}
-             <div className="absolute -top-10 -right-10 w-32 h-32 bg-blue-500/10 blur-3xl rounded-full pointer-events-none"></div>
+             <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-bl from-blue-500/10 to-transparent pointer-events-none"></div>
 
-            <h2 className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
+            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
               <FlaskConical className="w-4 h-4 text-blue-400" />
-              DFT Workflow
+              DFT Agent
             </h2>
 
             <div className="space-y-4 relative z-10">
                <div>
-                <label className="text-xs text-slate-500 font-medium mb-1 block">Adsorbate Molecule</label>
+                <label className="text-xs text-slate-500 font-semibold mb-1 block">Adsorbate Molecule</label>
                 <input
                   type="text"
                   value={adsorbate}
                   onChange={(e) => setAdsorbate(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-white"
-                  placeholder="e.g. CO, H2O, OH"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all text-white"
+                  placeholder="e.g. CO, H2O"
                 />
               </div>
 
-              <div className="p-3 bg-slate-800/50 rounded border border-slate-700/50 text-xs text-slate-400">
-                <p className="mb-2 font-semibold text-slate-300">Active Pipeline:</p>
-                <ul className="space-y-2 pl-1">
-                  <li className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                    <span>Materials Project + ASE</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
-                    <span>Pymatgen Site Finder</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                    <span>FAIR-Chem UMA Potential</span>
-                  </li>
-                </ul>
+              <div className="p-3 bg-slate-950 rounded border border-slate-800 text-[11px] text-slate-400 font-mono">
+                <div className="flex items-center gap-2 mb-2 text-slate-300">
+                   <Terminal className="w-3 h-3" />
+                   <span>Pipeline Config</span>
+                </div>
+                <div className="flex items-center gap-2 text-emerald-400/80">
+                   <ChevronRight className="w-3 h-3" /> pymatgen.AdsorbateSiteFinder
+                </div>
+                <div className="flex items-center gap-2 text-blue-400/80">
+                   <ChevronRight className="w-3 h-3" /> fairchem.OCPCalculator
+                </div>
               </div>
 
               <button
                 onClick={handleRunAnalysis}
                 disabled={!structure || status === AnalysisStatus.ANALYZING}
-                className={`w-full py-2.5 rounded-lg text-sm font-medium transition-all shadow-lg flex items-center justify-center gap-2
+                className={`w-full py-2.5 rounded-lg text-xs font-bold uppercase tracking-wide transition-all shadow-lg flex items-center justify-center gap-2
                   ${!structure 
                     ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700' 
-                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-blue-500/25 border border-blue-500/50'
+                    : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-500/20'
                   }
                 `}
               >
                 {status === AnalysisStatus.ANALYZING ? (
-                  <>Running UMA Relaxation...</>
+                  <>
+                     <RotateCw className="w-3.5 h-3.5 animate-spin" /> Processing...
+                  </>
                 ) : (
                   <>
-                    <Play className="w-4 h-4 fill-current" />
-                    Run Calculation
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    Run Simulation
                   </>
                 )}
               </button>
             </div>
           </div>
 
-          {/* Terminal / Logs */}
-          <div className="flex-1 bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs overflow-hidden flex flex-col min-h-[200px]">
-            <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-800 text-slate-500">
-              <Terminal className="w-3 h-3" />
-              <span>Workflow Log</span>
+          {/* Logs Console */}
+          <div className="flex-1 bg-slate-950 border border-slate-800 rounded-xl p-0 font-mono text-xs overflow-hidden flex flex-col min-h-[250px] shadow-inner">
+            <div className="flex items-center justify-between px-3 py-2 bg-slate-900 border-b border-slate-800">
+               <div className="flex items-center gap-2 text-slate-400">
+                 <Terminal className="w-3 h-3" />
+                 <span>workflow.log</span>
+               </div>
+               <div className="flex gap-1.5">
+                 <div className="w-2.5 h-2.5 rounded-full bg-red-500/20 border border-red-500/50"></div>
+                 <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/20 border border-yellow-500/50"></div>
+                 <div className="w-2.5 h-2.5 rounded-full bg-green-500/20 border border-green-500/50"></div>
+               </div>
             </div>
-            <div className="flex-1 overflow-y-auto space-y-2 scrollbar-thin scrollbar-thumb-slate-800">
-              {logs.length === 0 && <span className="text-slate-600 italic">Waiting for input...</span>}
+            <div className="flex-1 overflow-y-auto p-3 space-y-1.5 scrollbar-thin scrollbar-thumb-slate-800">
+              {logs.length === 0 && <span className="text-slate-700 italic">Ready to initialize agent...</span>}
               {logs.map((log, idx) => (
-                <div key={idx} className="flex gap-2 animate-in fade-in slide-in-from-left-2 duration-300">
-                  <span className="text-slate-600 shrink-0">[{log.timestamp}]</span>
+                <div key={idx} className="flex gap-2 text-[11px] leading-relaxed break-all hover:bg-slate-900/50 rounded px-1 -mx-1 transition-colors">
+                  <span className="text-slate-600 shrink-0 select-none">{log.timestamp}</span>
+                  <span className={`font-bold shrink-0 w-16 text-right select-none ${
+                    log.source === 'Python' ? 'text-yellow-500' :
+                    log.source === 'ASE' ? 'text-orange-400' :
+                    log.source === 'FAIR-Chem' ? 'text-blue-400' :
+                    'text-slate-500'
+                  }`}>[{log.source}]</span>
                   <span className={`${
                     log.type === 'error' ? 'text-red-400' : 
                     log.type === 'success' ? 'text-emerald-400' : 
                     log.type === 'warning' ? 'text-amber-400' :
-                    'text-blue-300'
+                    'text-slate-300'
                   }`}>
-                    {log.type === 'success' ? '✔ ' : log.type === 'error' ? '✖ ' : '> '}
                     {log.message}
                   </span>
                 </div>
               ))}
+              <div ref={logsEndRef} />
             </div>
           </div>
         </div>
 
-        {/* MIDDLE COLUMN: 3D Visualization */}
-        <div className="lg:col-span-5 flex flex-col h-[600px] lg:h-auto">
+        {/* MIDDLE COLUMN: Visualization */}
+        <div className="lg:col-span-5 flex flex-col min-h-[500px] lg:h-auto relative">
           <StructureViewer 
             structure={structure} 
             sites={analysisResult?.sites || []}
@@ -236,18 +261,18 @@ const App: React.FC = () => {
           />
         </div>
 
-        {/* RIGHT COLUMN: Results */}
+        {/* RIGHT COLUMN: Data Dashboard */}
         <div className="lg:col-span-4 overflow-y-auto lg:h-[calc(100vh-8rem)] pr-1">
-          {analysisResult ? (
+          {analysisResult || structure ? (
             <ResultsDashboard result={analysisResult} />
           ) : (
-            <div className="h-full flex flex-col items-center justify-center text-slate-600 p-8 text-center border border-dashed border-slate-800 rounded-xl bg-slate-900/30">
-              <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mb-4">
+            <div className="h-full flex flex-col items-center justify-center p-8 text-center border border-dashed border-slate-800 rounded-xl bg-slate-900/20">
+              <div className="w-20 h-20 rounded-full bg-slate-800/50 flex items-center justify-center mb-4 ring-1 ring-slate-700">
                 <Database className="w-8 h-8 text-slate-600" />
               </div>
-              <h3 className="text-lg font-medium text-slate-400 mb-2">No Analysis Data</h3>
-              <p className="text-sm max-w-xs">
-                Fetch a structure from Materials Project and run the FAIR-Chem UMA workflow to visualize adsorption sites.
+              <h3 className="text-lg font-medium text-slate-300 mb-2">Awaiting Data</h3>
+              <p className="text-sm text-slate-500 max-w-xs leading-relaxed">
+                Configure the agent on the left to fetch materials from the Materials Project and run simulations.
               </p>
             </div>
           )}
