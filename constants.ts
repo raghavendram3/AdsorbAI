@@ -1,3 +1,4 @@
+
 export const CPK_COLORS: Record<string, string> = {
   H: '#FFFFFF',
   C: '#909090',
@@ -51,6 +52,26 @@ export const ATOMIC_RADII: Record<string, number> = {
   Pt: 1.38,
   Pd: 1.37,
   X: 1.0
+};
+
+// Physical properties for deterministic generation
+export interface ElementData {
+  latticeConstant: number; // in Angstroms (FCC)
+  mpId: string;
+  formationEnergy: number; // eV/atom
+  bandGap: number; // eV
+  symmetry: string;
+  electronegativity: number; // Pauling scale (for binding energy heuristics)
+}
+
+export const ELEMENT_PROPERTIES: Record<string, ElementData> = {
+  Au: { latticeConstant: 4.078, mpId: 'mp-81', formationEnergy: 0.0, bandGap: 0.0, symmetry: 'Fm-3m', electronegativity: 2.54 },
+  Ag: { latticeConstant: 4.085, mpId: 'mp-124', formationEnergy: 0.0, bandGap: 0.0, symmetry: 'Fm-3m', electronegativity: 1.93 },
+  Cu: { latticeConstant: 3.615, mpId: 'mp-30', formationEnergy: 0.0, bandGap: 0.0, symmetry: 'Fm-3m', electronegativity: 1.90 },
+  Pt: { latticeConstant: 3.924, mpId: 'mp-126', formationEnergy: 0.0, bandGap: 0.0, symmetry: 'Fm-3m', electronegativity: 2.28 },
+  Pd: { latticeConstant: 3.890, mpId: 'mp-2', formationEnergy: 0.0, bandGap: 0.0, symmetry: 'Fm-3m', electronegativity: 2.20 },
+  Ni: { latticeConstant: 3.524, mpId: 'mp-23', formationEnergy: 0.0, bandGap: 0.0, symmetry: 'Fm-3m', electronegativity: 1.91 },
+  Al: { latticeConstant: 4.049, mpId: 'mp-134', formationEnergy: 0.0, bandGap: 0.0, symmetry: 'Fm-3m', electronegativity: 1.61 }
 };
 
 export const DEFAULT_CAMERA_POSITION: [number, number, number] = [10, 10, 10];

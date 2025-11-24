@@ -1,3 +1,4 @@
+
 export interface Atom {
   id: number;
   element: string;
@@ -34,6 +35,9 @@ export interface AnalysisResult {
   summary: string;
   potentialUsed: string; // e.g., "FAIR-Chem UMA-v1"
   calculationTime: string;
+  // OCP Specific
+  systemId?: string;
+  model?: string;
 }
 
 export enum AnalysisStatus {

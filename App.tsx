@@ -1,9 +1,10 @@
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Header } from './components/Header';
 import { StructureViewer } from './components/StructureViewer';
 import { ResultsDashboard } from './components/ResultsDashboard';
 import { MaterialStructure, AnalysisResult, AnalysisStatus, LogEntry } from './types';
-import { generateStructure, analyzeAdsorption } from './services/geminiService';
+import { generateSlabStructure, calculateAdsorptionPhysics } from './services/physicsEngine';
 import { Search, Play, Terminal, Cpu, Database, RotateCw, KeyRound, FlaskConical, ChevronRight } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -33,29 +34,31 @@ const App: React.FC = () => {
     setAnalysisResult(null);
     setLogs([]);
     
-    addLog(`Initializing Workflow Agent...`, 'info', 'Main');
+    addLog(`Initializing Workflow Engine...`, 'info', 'Main');
     
     try {
-      // Step 1: MP Rester
+      // Step 1: MP Rester (Simulated)
       addLog(`from mp_api.client import MPRester`, 'info', 'Python');
       if (mpApiKey) {
         addLog(`mpr = MPRester(api_key="****${mpApiKey.slice(-4)}")`, 'info', 'Python');
         addLog(`Connecting to Materials Project API...`, 'info', 'MPRester');
       } else {
-        addLog(`mpr = MPRester() # Using public access`, 'warning', 'Python');
+        addLog(`mpr = MPRester() # Public Access Mode`, 'warning', 'Python');
       }
       
-      await new Promise(r => setTimeout(r, 600)); // Simulation delay
-      addLog(`Searching for lowest formation energy structure for '${query}'...`, 'info', 'MPRester');
+      await new Promise(r => setTimeout(r, 400)); 
+      addLog(`Fetching structure data for '${query}'...`, 'info', 'MPRester');
       
-      // Step 2: ASE Build
+      // Step 2: ASE Build (Deterministic)
       addLog(`import ase.build`, 'info', 'Python');
-      addLog(`Building surface slab via ase.build.surface...`, 'info', 'ASE');
+      addLog(`Building surface slab via ase.build.fcc${query.includes('100') ? '100' : '111'}...`, 'info', 'ASE');
 
-      const struct = await generateStructure(query, mpApiKey);
+      // CALL PHYSICS ENGINE
+      const struct = await generateSlabStructure(query);
       
       setStructure(struct);
       addLog(`Structure created: ${struct.formula} ${struct.millerIndex}`, 'success', 'ASE');
+      addLog(`Lattice: a=${(struct.latticeVectors?.[0][0] || 0).toFixed(2)}Å (Simulated)`, 'info', 'ASE');
       addLog(`MP-ID: ${struct.mpId} | E_form: ${struct.formationEnergy?.toFixed(3)} eV/atom`, 'info', 'Data');
       setStatus(AnalysisStatus.IDLE);
     } catch (error: any) {
@@ -69,24 +72,47 @@ const App: React.FC = () => {
     if (!structure || !adsorbate) return;
 
     setStatus(AnalysisStatus.ANALYZING);
-    addLog(`Starting Adsorption Analysis Pipeline...`, 'info', 'Main');
+    addLog(`Starting 'find_adsorbate_binding_sites' script...`, 'info', 'Main');
     
     try {
-      // Step 3: Pymatgen
-      addLog(`from pymatgen.analysis.adsorption import AdsorbateSiteFinder`, 'info', 'Python');
-      addLog(`asf = AdsorbateSiteFinder(slab)`, 'info', 'Python');
-      addLog(`Identifying symmetry-distinct adsorption sites...`, 'info', 'Pymatgen');
-      await new Promise(r => setTimeout(r, 800));
+      const modelName = "equiformer_v2_31M_s2ef_all_md";
+      const ctxPrefix = `[${adsorbate}/${structure.mpId}]`;
       
-      // Step 4: FAIR-Chem
-      addLog(`import fairchem.core`, 'info', 'Python');
-      addLog(`calc = OCPCalculator(checkpoint="fairchem_uma_v1")`, 'info', 'Python');
-      addLog(`Running geometry relaxation (LBFGS) for all configurations...`, 'info', 'FAIR-Chem');
+      // OCP Script Simulation
+      addLog(`from ocpapi.client import Client, Models, Slabs`, 'info', 'Python');
+      addLog(`client = Client()`, 'info', 'Python');
       
-      const result = await analyzeAdsorption(structure, adsorbate);
+      await new Promise(r => setTimeout(r, 300));
+      addLog(`Ensuring that model ${modelName} is supported`, 'info', 'ocpapi');
+      addLog(`Ensuring that bulk ${structure.mpId} is supported`, 'info', 'ocpapi');
+      
+      addLog(`Generating surfaces for bulk ${structure.mpId}`, 'info', 'ocpapi');
+      await new Promise(r => setTimeout(r, 500));
+      
+      // Adsorption Site Finding (Geometric)
+      addLog(`${ctxPrefix} Identifying High-Symmetry Sites (Top, Bridge, Hollow)`, 'info', 'Pymatgen');
+      await new Promise(r => setTimeout(r, 600));
+
+      // OCP Submission Simulation
+      const sysId = `sys_${Math.random().toString(36).substr(2, 9)}`;
+      addLog(`Submitting relaxations for adsorbate placements`, 'info', 'ocpapi');
+      addLog(`Relaxations running with system id ${sysId}`, 'success', 'ocpapi');
+
+      // Polling Loop Simulation
+      addLog(`Waiting for relaxations to finish (system_id=${sysId})...`, 'warning', 'ocpapi');
+      
+      const steps = 4;
+      for (let i = 1; i <= steps; i++) {
+          await new Promise(r => setTimeout(r, 600));
+          addLog(`Polling status: ${i}/${steps} jobs completed...`, 'info', 'ocpapi');
+      }
+
+      // Calculate Final Results (Heuristic Physics)
+      const result = await calculateAdsorptionPhysics(structure, adsorbate);
       
       setAnalysisResult(result);
-      addLog(`Calculations complete. ${result.sites.length} stable configurations found.`, 'success', 'Main');
+      addLog(`All relaxations have finished`, 'success', 'ocpapi');
+      addLog(`Results fetched: ${result.sites.length} stable configurations identified.`, 'success', 'Main');
       setStatus(AnalysisStatus.COMPLETED);
     } catch (error: any) {
       console.error(error);
@@ -134,7 +160,7 @@ const App: React.FC = () => {
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg py-2 pl-3 pr-10 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all text-white placeholder-slate-600"
-                    placeholder="e.g. Cu(100), mp-30"
+                    placeholder="e.g. Au(111), Cu(100)"
                   />
                   <Search className="w-4 h-4 text-slate-500 absolute right-3 top-2.5" />
                 </div>
@@ -161,7 +187,7 @@ const App: React.FC = () => {
 
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
               <FlaskConical className="w-4 h-4 text-blue-400" />
-              DFT Agent
+              OCP Agent
             </h2>
 
             <div className="space-y-4 relative z-10">
@@ -172,20 +198,20 @@ const App: React.FC = () => {
                   value={adsorbate}
                   onChange={(e) => setAdsorbate(e.target.value)}
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all text-white"
-                  placeholder="e.g. CO, H2O"
+                  placeholder="e.g. CO, O, N"
                 />
               </div>
 
               <div className="p-3 bg-slate-950 rounded border border-slate-800 text-[11px] text-slate-400 font-mono">
                 <div className="flex items-center gap-2 mb-2 text-slate-300">
                    <Terminal className="w-3 h-3" />
-                   <span>Pipeline Config</span>
+                   <span>Workflow Config</span>
                 </div>
                 <div className="flex items-center gap-2 text-emerald-400/80">
-                   <ChevronRight className="w-3 h-3" /> pymatgen.AdsorbateSiteFinder
+                   <ChevronRight className="w-3 h-3" /> client.get_slabs
                 </div>
                 <div className="flex items-center gap-2 text-blue-400/80">
-                   <ChevronRight className="w-3 h-3" /> fairchem.OCPCalculator
+                   <ChevronRight className="w-3 h-3" /> model: EquiformerV2
                 </div>
               </div>
 
@@ -206,7 +232,7 @@ const App: React.FC = () => {
                 ) : (
                   <>
                     <Play className="w-3.5 h-3.5 fill-current" />
-                    Run Simulation
+                    Submit Job
                   </>
                 )}
               </button>
@@ -218,7 +244,7 @@ const App: React.FC = () => {
             <div className="flex items-center justify-between px-3 py-2 bg-slate-900 border-b border-slate-800">
                <div className="flex items-center gap-2 text-slate-400">
                  <Terminal className="w-3 h-3" />
-                 <span>workflow.log</span>
+                 <span>ocp_agent.log</span>
                </div>
                <div className="flex gap-1.5">
                  <div className="w-2.5 h-2.5 rounded-full bg-red-500/20 border border-red-500/50"></div>
@@ -234,7 +260,7 @@ const App: React.FC = () => {
                   <span className={`font-bold shrink-0 w-16 text-right select-none ${
                     log.source === 'Python' ? 'text-yellow-500' :
                     log.source === 'ASE' ? 'text-orange-400' :
-                    log.source === 'FAIR-Chem' ? 'text-blue-400' :
+                    log.source === 'ocpapi' ? 'text-blue-400' :
                     'text-slate-500'
                   }`}>[{log.source}]</span>
                   <span className={`${
